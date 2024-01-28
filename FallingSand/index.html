@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Falling sand</title>
+  </head>
+  <body style="background-color:black">
+    <canvas id="world" width="320" height="200"></canvas>
+	<script type="text/javascript">
+    class Color {
+      constructor(red, green, blue, alpha) {
+        this.red = red;
+        this.green = green;
+        this.blue = blue;
+        this.alpha = alpha;
+      }
+    }
+
+    const MouseButtonStates = {
+      Move: 0,
+      Up: 1,
+      Down: 2,
+      Out: 3,
+      In: 4
+    }
+
+    var timer;
+    var rendering = false;
+
+    var mouseDown = false;
+    var mouseOut = true;
+
+    var mouseX=0;
+    var mouseY=0;
+
+    var ctx = world.getContext("2d", { alpha: false, willReadFrequently: true});
+    var imageData = ctx.getImageData(0, 0, world.width, world.height);
+
+    var idPixel = ctx.createImageData(1,1); 
+    var bytesInLine = world.width * 4;
+
+    // Register mouse click event
+    world.addEventListener("mousemove", function (e) {
+        drawXy(MouseButtonStates.Move, e)
+    }, false);
+    world.addEventListener("mousedown", function (e) {
+      drawXy(MouseButtonStates.Down, e)
+    }, false);
+    world.addEventListener("mouseup", function (e) {
+      drawXy(MouseButtonStates.Up, e)
+    }, false);
+    world.addEventListener("mouseout", function (e) {
+      drawXy(MouseButtonStates.Out, e)
+    }, false);
+    world.addEventListener("mouseenter", function (e) {
+      drawXy(MouseButtonStates.In, e)
+    }, false);
+
+    // Function that creates an empty 2d array with 0
+    function create2DArray(rows, columns) {
+      var arr = [];
+      for (var i=0;i<rows;i++) {
+        var row = arr[i] = [];
+        for (var j=0;j<columns;j++) {
+          row[j] = 0;
+        }
+      }
+      return arr;
+    }
+
+    // Function that draw a pixel at x,y but only if within the canvas
+    function drawPixel(x, y, color) {
+      if (x<0 || x>=(world.width-1) || y<0 || y>=(world.height-1))
+        return;
+      var offset = y*bytesInLine + x * 4;
+      imageData.data.set([color.red, color.green, color.blue], offset);
+    }
+
+    var c = new Color(255,255,255,255);
+
+    // function that register mouse movement and buttons
+    function drawXy(btnState, event) {
+      if (btnState == MouseButtonStates.Down) {
+        mouseDown = true;
+      } else
+      if (btnState == MouseButtonStates.Up) {
+        mouseDown = false;
+      } else
+      if (btnState == MouseButtonStates.Out) {
+        mouseOut = true;
+      } else
+      if (btnState == MouseButtonStates.In) {
+        mouseOut = false;
+      }
+
+      const rect = world.getBoundingClientRect()
+      mouseX = event.clientX - rect.left
+      mouseY = event.clientY - rect.top
+
+      startTimer();
+    }
+
+    // Draw filled circle at mouseX, mouseY with specified radius
+    function drawCircle()
+    {
+      var radius = 5;
+      for (var dy=-radius; dy<radius; dy++)
+      {
+        for (var dx=-radius; dx<radius; dx++)
+        {
+          if (dx*dx+dy*dy<radius*radius)
+          {
+            var c = new Color(195+Math.floor(Math.random()*30),150+Math.floor(Math.random()*40),58+Math.floor(Math.random()*80),255);
+            drawPixel(mouseX+dx,mouseY+dy,c);
+          }
+        }
+      }
+    }
+
+    // Scan trough the canvas and update all the sand pixels
+    function movePixelsDown()
+    {
+      if (mouseDown && !mouseOut)
+      {
+        drawCircle();
+      }
+
+      var data = imageData.data;
+      var dataChanged = false;
+      for (var y = world.height-2; y>=0; y--)
+      {
+        var offsetY = y*bytesInLine;
+        for (x=0; x<world.width; x++)
+        {
+          var offset = x*4 + offsetY;
+          if (data[offset] > 0) // Found colored pixel
+          {
+            var firstPixelOffset = offset + bytesInLine;
+            
+            if (data[firstPixelOffset]==0)
+            {
+              dataChanged = true;
+              for (var i=0; i<3; i++)
+              {
+                data[firstPixelOffset + i] = data[offset + i];
+                data[offset + i] = 0;
+              }
+            } 
+            else
+            {
+              var leftOrRight = Math.floor(Math.random() * 2);
+
+              for (var checkPos=0; checkPos<2; checkPos++)
+              {
+                if (checkPos>0)
+                {
+                  leftOrRight = -leftOrRight;
+                }
+                if(x+leftOrRight<0 || x+leftOrRight>=(world.width-1))
+                {
+                  continue;
+                }
+                var secondPixelOffset = offset + bytesInLine + (leftOrRight*4);
+                if (data[secondPixelOffset]==0)
+                {
+                  dataChanged = true;
+                  for (var i=0; i<3; i++)
+                  {
+                    data[secondPixelOffset + i] = data[offset + i];
+                    data[offset + i] = 0;
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      if (!dataChanged)
+      {
+        stopTimer();
+      }
+    }
+
+    // Start physics timer
+    function startTimer()
+    {
+      if (timer==null)
+      {
+        timer = setInterval(function () {
+          if (!rendering) {
+            rendering = true;
+            movePixelsDown();
+            rendering = false;
+          }
+        }, 10);
+      }
+    }
+
+    // Stop physics timer
+    function stopTimer() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    // Refresh canvas
+    function draw()
+    {
+      ctx.putImageData(imageData, 0, 0);
+      requestAnimationFrame(draw);
+    }    
+    draw();
+
+  </script>
+  </body>
+</html>
