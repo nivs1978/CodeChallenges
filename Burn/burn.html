@@ -1,0 +1,244 @@
+<!--
+Hi guys, try this, use it in your code, but please credit
+
+Frank Jan Sorensen Alias:Frank Patxi (fjs@lab.jt.dk) for the
+fireroutine.
+
+Converted to JavaScript by: Hans Milling (
+
+-->
+<!DOCTYPE html> 
+<html lang="en"> 
+<head> 
+<meta charset=utf-8 /> 
+<meta name="viewport" content="width=620" /> 
+<title>Fire</title> 
+<style type="text/css">
+  html, body
+  {
+    height:100%;
+    margin:0px;
+    padding:0px;
+    font-family: Verdana;
+    background-color: black;
+  }
+</style>
+</head>
+<body style="background-color:white;">
+  <canvas id="fireCanvas" width="320", height="200"></canvas>
+  <div>Burn version 1.00</div>
+  <div></div>
+  <div>Light'n'play</div>
+  <div></div>
+  <div>Keys :</div>
+  <div>&lt;space&gt; : Throw in a match</div>
+  <div>&lt;W&gt;     : Water</div>
+  <div>&lt;+&gt;     : Increase intensity</div>
+  <div>&lt;-&gt;     : Decrease intensity</div>
+  <div>&lt;C&gt;     : Initialize fire</div>
+  <div>&lt;1&gt;..&lt;9&gt;: Burnability (1=Wood, 9=Gaz)</div>
+  <script type="text/javascript">
+
+  class Color {
+    constructor(r, g, b) {
+      this.r = r;
+      this.g = g;
+      this.b = b;
+    }
+  }
+let ctx = fireCanvas.getContext('2d');
+let imageData;
+let pal = [];
+let ch = "";
+
+const RootRand     =  20; // Max/Min decrease of the root of the flames
+const Decay        =  10; // How far should the flames go up on the screen?
+const MinY         = 100; // Startingline of the flame routine.
+                          // (should be adjusted along with MinY above)
+const Smooth       =   1; // How descrete can the flames be?
+const MinFire      =  50; // limit between the "starting to burn" and
+                          // the "is burning" routines
+const XStart       =   0; // Startingpos on the screen
+const XEnd         = 319; // Guess!
+const Width        = XEnd-XStart; //Well-
+const MaxColor     = 110; // Constant for the MakePal procedure
+let   FireIncrease =   3; // 3 = Wood, 90 = Gazolin
+
+let FlameArray = new Array(320).fill(0);
+let MoreFire = 1;
+
+let screen = Array.from({ length: 320 }, () => Array(200).fill(0));
+
+// This is the original implementation (adjusted for 255 in RGB values instead of 63 as max RBG value)
+function Hsl2Rgb(H, S, L) { // Convert (Hue, Saturation, Lightness) -> (RGB)
+  let Rv = 1 + S * Math.sin(H - 2 * Math.PI / 3);
+  let Gv = 1 + S * Math.sin(H);
+  let Bv = 1 + S * Math.sin(H + 2 * Math.PI / 3);
+  let T = 254.999 * L / 2;
+  return new Color(
+    Math.floor(Rv * T),
+    Math.floor(Gv * T),
+    Math.floor(Bv * T)
+  );
+}
+
+// Generate palette. The first part are the darker colors, and the last part goes from yellow to white.
+function MakePal() {
+  for (let i = 0; i< MaxColor; i++) {
+    pal.push(Hsl2Rgb(4.6-1.5*i/MaxColor,i/MaxColor,i/MaxColor));
+  }
+  for (let i = MaxColor; i<255; i++) {
+    let p = pal[i-1];
+    pal[i] = new Color(p.r, p.g, p.b);
+    if (pal[i].r<251) pal[i].r+=4;
+    if (i % 2 == 0 && pal[i].g < 210) pal[i].g+=4;
+    if (i % 2 == 0 && pal[i].b < 251) pal[i].b+=4;
+  }
+}
+
+// Implementation of Pascal function Pred that ensures that the value is >= 0 
+function Pred(x) {
+  if (x > 0)
+  {
+    return x-1;
+  } else {
+    return 0;
+  }
+}
+
+// Returns a number > -R and < R
+function Rand(r) {
+    return Math.floor(Math.random() * (r * 2 + 1)) - r;
+}
+
+// Returns random integer between 0 and less than R
+function Random(r) {
+    return Math.floor(Math.random() * r);
+}
+
+// Set a pixels RGB color in the imageData array- this is the fastest way to draw individual pixels on a canvas
+function setCanvasPixel(imageData, x, y, c, a) {
+	index = (x + y * imageData.width) * 4;
+	imageData.data[index+0] = c.r;
+	imageData.data[index+1] = c.g;
+	imageData.data[index+2] = c.b;
+	imageData.data[index+3] = a;
+}
+
+// This function converts the screen byte array to canvas using the palette to get the RGB colors
+function screen2canvas()
+{
+  for (x=0; x<320; x++)
+  {
+    for (y=0; y<200; y++)
+    {
+      var col = screen[x][y];
+      setCanvasPixel(imageData, x, y, pal[col], 255);
+    }
+  }
+  ctx.putImageData(imageData, 0, 0); // at coords 0,0
+}
+
+let width = parseInt(fireCanvas.width);
+let height = parseInt(fireCanvas.height);
+imageData= ctx.createImageData(width, height);
+
+// main routine
+function burn()
+{
+  for (let i = XStart; i <= XEnd; i++) {
+    screen[i][199] = FlameArray[i];
+  }
+
+  // This loop makes the actual flames
+  for (let i = XStart; i <= XEnd; i++) {
+    for (let j = MinY; j <= 199; j++) {
+        let v = screen[i][j];
+        if (v === 0 || v < Decay || i <= XStart || i >= XEnd) {
+            screen[i][j - 1] =  0;
+        } else {
+          let x =i - (Random(3) - 1);
+          let y = Pred(j);
+          let value = v - Random(Decay);
+          screen[x][y] = value;
+        }
+    }
+  }
+
+  // Match?
+  if (Random(150) < 1 || ch === ' ') {
+    let start = XStart + Random(XEnd - XStart - 5);
+    for (let i=0; i<5; i++)
+    {
+      FlameArray[start + i] = 255;  
+    }
+  }
+
+  // In-/Decrease?
+  if (ch === '-') {
+    if (MoreFire > -2) MoreFire--;
+  }
+  if (ch === '+') {
+    if (MoreFire < 4) MoreFire++;
+  }
+
+  // !!
+  if (ch === 'c') FlameArray.fill(0);
+  if (ch === 'w') {
+      for (let i=0; i<10; i++) {
+        FlameArray[XStart+Random(Width)]=0;
+      } 
+  }
+  if (ch.length>0 && '123456789'.includes(ch)) {
+    FireIncrease = 3 + Math.pow(parseInt(ch) - 1, 2);
+  }
+
+  ch = ""; // Clear key
+
+  // This loop controls the "root" of the flames ie. the values in FlameArray.
+  for (let i = XStart; i <= XEnd; i++) {
+    let x = FlameArray[i];
+
+    if (x < MinFire) {
+        // Increase by the "burnability"
+        if (x > 10) x += Random(FireIncrease);
+    } else {
+        // Otherwise randomize and increase by intensity (is burning)
+        x += Rand(RootRand) + MoreFire;
+    }
+    if (x > 255) x = 255; // X Too large ?
+    FlameArray[i] = x;
+}
+
+    // Pour a little water on both sides of the fire to make it look nice on the sides
+    for (let i = 0; i < Math.floor(Width / 8); i++) {
+        let x = Math.floor(Math.pow(Math.random(), 2) * Width / 8);
+        FlameArray[XStart + x] = 0;
+        FlameArray[XEnd - x] = 0;
+    }
+
+        // Smoothen the values of FrameArray to avoid "descrete" flames
+        let p = 0;
+    for (let i = XStart + Smooth; i <= XEnd - Smooth; i++) {
+        let x = 0;
+        for (let j = -Smooth; j <= Smooth; j++) {
+            x += FlameArray[i + j];
+        }
+        FlameArray[i] = Math.floor(x / (2 * Smooth + 1));
+    }
+
+    screen2canvas();
+
+  requestAnimationFrame(burn);
+}
+
+addEventListener("keydown", (event) => {
+    ch = event.key;
+});
+
+MakePal();
+burn();
+
+</script>
+</body>
+</html>
